@@ -25,17 +25,16 @@ def guesspb(vis):
     """
     Produces a PrimaryBeamModel from a measurementset
     """
-    print(vis)
-    from taskinit import ms,tb,qa
-    ms.open(vis)
-    freq = (np.mean(ms.range('chan_freq')['chan_freq'])/1e9)
-    ms.done()
-    tb.open(vis+'/OBSERVATION')
-    telescope = tb.getcol('TELESCOPE_NAME')[0]
-    tb.done()
+    print("Guessing PB from {}".format(vis))
+    from casacore.tables import table
+    spwtab = table("{}::SPECTRAL_WINDOW".format(vis))
+    obstab = table("{}::OBSERVATION".format(vis))
+    freq = spwtab.getcol('CHAN_FREQ', 0, 1).mean()/1e+9
+    telescope = obstab.getcol('TELESCOPE_NAME')[0]
     pbfile = '{0}-{1:.1f}GHz.pb'.format(telescope, freq)
-    print(pbfile)
+    print("PB files is {}".format(pbfile))
     if not os.access(pbfile, os.F_OK):
+        raise RuntimeError("PB file {} not found. Run casa_make_pb_file.py script?")
         stacker.make_pbfile(vis, pbfile)
     return MSPrimaryBeamModel(pbfile)
 

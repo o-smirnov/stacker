@@ -172,11 +172,12 @@ def stack(coords, outfile, stampsize = 32, imagenames= [], method = 'mean',
     import os
     import shutil
     import numpy as np
-    from taskinit import ia, casalog
+    # from taskinit import ia, casalog
+    import astropy.io.fits as fits
 
-    casalog.origin('stacker')
-    casalog.post('#'*42,'INFO')
-    casalog.post('#'*5 +  ' {0: <31}'.format("Begin Task: Stacker")+'#'*5, 'INFO')
+    # casalog.origin('stacker')
+    # casalog.post('#'*42,'INFO')
+    # casalog.post('#'*5 +  ' {0: <31}'.format("Begin Task: Stacker")+'#'*5, 'INFO')
 
     global skymap
     global data
@@ -189,20 +190,17 @@ def stack(coords, outfile, stampsize = 32, imagenames= [], method = 'mean',
 # Important that len(coords) here is for the pixel coordinates, not physical!
     _allocate_buffers(coords.imagenames, stampsize, len(coords))
 
-    ia.open(coords.imagenames[0])
-    cs = ia.coordsys()
-    outnchans = ia.boundingbox()['trc'][2]+1
-    outnstokes = ia.boundingbox()['trc'][3]+1
-    ia.done()
+    hdr = fits.open(coords.imagenames[0])[0].header
+    outnchans = hdr['NAXIS3']
+    outnstokes = hdr['NAXIS4']
 
 
 
-    for imagename in coords.imagenames:
-            ia.open(imagename)
-            if ia.shape()[2] != outnchans or ia.shape()[3] != outnstokes:
+    for imagename in coords.imagenames[1:]:
+            hdr = fits.open(imagename)[0].header
+            if hdr['NAXIS3'] != outnchans or hdr['NAXIS4'] != outnstokes:
                     print('Channels/polarisations do not match in all images! You probably want to stacking do stacking on continuum data and not on spectral cube.')
                     return
-            ia.done()
 
     _load_stack(coords, psfmode)
 
@@ -214,16 +212,15 @@ def stack(coords, outfile, stampsize = 32, imagenames= [], method = 'mean',
         coords = calculate_pb_weights(coords, primarybeam, imagenames)
 
     npos = len([c.weight for c in coords if c.weight > 1e-6])
-    casalog.post('Number of stacking positions: {0}'.format(npos),
-            priority='INFO')
-
+    print('Number of stacking positions: {0}'.format(npos))
+ 
     stacked_im  = _stack_stack(method, coords)
 
 
     _write_stacked_image(outfile, stacked_im,
                          coords.imagenames[0], stampsize)
-    casalog.post('#'*5 +  ' {0: <31}'.format("End Task: stacker")+'#'*5)
-    casalog.post('#'*42)
+    # casalog.post('#'*5 +  ' {0: <31}'.format("End Task: stacker")+'#'*5)
+    # casalog.post('#'*42)
     return stacked_im[int(stampsize/2), int(stampsize/2),0,0]
 
             
@@ -277,22 +274,15 @@ def _write_stacked_image(imagename, pixels, template_image, stampsize):
     import os
     import shutil
     import numpy as np
-    from taskinit import ia
+    import astropy.io.fits as fits
 #     global stampsize
     if os.access(imagename, os.F_OK): shutil.rmtree(imagename)
 
-    ia.open(template_image)
-    beam = ia.restoringbeam()
-    cs = ia.coordsys()
-    ia.done()
+    hdr = fits.open(template_image)[0].header
+    hdr["CRVAL1"] = hdr["CRVAL2"] = 0  # stacked images goes to ra=dec=0
+    hdr["CRPIX1"] = hdr["CRPIX2"] = int(stampsize/2+0.5) + 1  # +1 since FITS is 1-based
 
-    csnew = cs.copy()
-    csnew.setreferencevalue([0.]*2, 'dir')
-    csnew.setreferencepixel([int(stampsize/2+0.5)]*2, 'dir')
-    ia.fromarray(imagename, pixels=pixels, csys = csnew.torecord())
-    ia.open(imagename)
-    ia.setrestoringbeam(beam=beam)
-    ia.done()
+    fits.PrimaryHDU(pixels, hdr).writeto("imagename", overwrite=True)
 
 
 def _calculate_peak_fluxes(coords, searchradius=None):

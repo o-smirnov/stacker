@@ -242,80 +242,83 @@ if link_against_casa or platform.system() == 'Darwin':
     svnversion = GetOption('casasvnversion')
     if svnversion is None:
         svnversion = casa_svnversion(casapath)
-
-if link_against_casa and int(svnversion) > 33600:
-	env['CPPDEFINES'] = {'LINKING_2_CASA_43': None}
-
-# Add code to support new casa version here
-if link_against_casa and int(svnversion) >= 38335:
-    env.Append(CXXFLAGS = ['-std=c++11'])
-if link_against_casa and int(svnversion) >= 36590 or platform.system() == 'Darwin':
-    import pysvn
-    print('Downloading casacore headers matching casapy svn revision {0}'.format(svnversion))
-    client = pysvn.Client()
-    casacore_svnpath = casa_svnpath_post46(casapath)
-    print(casacore_svnpath)
-    dl_casacore_path = 'casacore-for-casapy-r{0}'.format(svnversion)
-    if not os.access(dl_casacore_path, os.F_OK):
-        os.mkdir(dl_casacore_path)
-    svnrevision=pysvn.Revision(pysvn.opt_revision_kind.number, svnversion)
-    rev = client.checkout(os.path.join(casacore_svnpath, 'casacore'),
-                          os.path.join(dl_casacore_path, 'casacore'),
-                          svnrevision, svnrevision)
-    rev2 = client.checkout(os.path.join(casacore_svnpath, 'code'),
-                           os.path.join(dl_casacore_path, 'casacode'),
-                           svnrevision, svnrevision)
-
-    # Temporary hack to solve issue with casacore version in casapy.
-    shutil.copyfile(os.path.join(dl_casacore_path, 'casacore', 'casa', 'config.h.in'),
-            os.path.join(dl_casacore_path, 'casacore', 'casa', 'config.h'))
-    with open(os.path.join(dl_casacore_path, 'casacore', 'casa', 'config.h')) as tmpfile:
-        lines = list(tmpfile.readlines())
-    with open(os.path.join(dl_casacore_path, 'casacore', 'casa', 'config.h'), 'w') as tmpfile:
-        for line in lines:
-            if line == '#define CASA_DEFAULT_ALIGNMENT (@CASA_DEFAULT_ALIGNMENT@UL)\n':
-                line = '#define CASA_DEFAULT_ALIGNMENT (32UL)\n'
-            tmpfile.write(line)
-    print('done')
-elif link_against_casa and int(svnversion) >= 35147:
-	pass
-elif link_against_casa and int(svnversion) > 33600:
-    import pysvn
-    print('Downloading casacore headers matching casapy svn revision {0}'.format(svnversion))
-    client = pysvn.Client()
-    casacore_svnpath = 'https://svn.cv.nrao.edu/svn/casa/trunk/casacore/'
-    dl_casacore_path = 'casacore-for-casapy-r{0}'.format(svnversion)
-    if not os.access(dl_casacore_path, os.F_OK):
-        os.mkdir(dl_casacore_path)
-    svnrevision=pysvn.Revision(pysvn.opt_revision_kind.number, svnversion)
-    rev = client.checkout(casacore_svnpath,
-                          os.path.join(dl_casacore_path, 'casacore'),
-                          svnrevision, svnrevision)
-    print('done')
-elif link_against_casa and int(svnversion) > 22889:
-    import pysvn
-    print('Downloading casacore headers matching casapy svn revision {0}'.format(svnversion))
-    client = pysvn.Client()
-    casacore_svnpath = 'https://svn.cv.nrao.edu/svn/casa/trunk/casacore/'
-    dl_casacore_path = 'casacore-for-casapy-r{0}'.format(svnversion)
-    svnrevision=pysvn.Revision(pysvn.opt_revision_kind.number, svnversion)
-    rev = client.checkout(casacore_svnpath, dl_casacore_path, svnrevision, svnrevision)
-    print('done')
-
-if int(svnversion) > 32000:
-    casacorelibs = ['casa_scimath', 'casa_casa', 'casa_tables', 'casa_images', 
-                    'casa_ms', 'components', 'casa_coordinates',
-                    'casa_lattices','casa_measures', 'casa_scimath_f', 
-                    'casa_fits', 'casa_msfits', 'casa_mirlib']
 else:
-    casacorelibs = ['casa_scimath', 'casa_casa', 'casa_tables', 'casa_images', 
-                    'casa_ms', 'casa_components', 'casa_coordinates',
-                    'casa_lattices','casa_measures', 'casa_scimath_f',
-                    'casa_fits', 'casa_msfits', 'casa_derivedmscal',
-                    'casa_mirlib']
+    svnversion = 99999
 
-if link_against_casa :
-# Also add code here.
+casacorelibs = ['casa_scimath', 'casa_casa', 'casa_tables', 'casa_images', 
+                'casa_ms', 'casa_components', 'casa_coordinates',
+                'casa_lattices','casa_measures', 'casa_scimath_f', 
+                'casa_fits', 'casa_msfits', 'casa_mirlib']
+
+
+if link_against_casa:
+    if int(svnversion) > 33600:
+	    env['CPPDEFINES'] = {'LINKING_2_CASA_43': None}
+
+    # Add code to support new casa version here
+    if link_against_casa and int(svnversion) >= 38335:
+        env.Append(CXXFLAGS = ['-std=c++11'])
+    if link_against_casa and int(svnversion) >= 36590 or platform.system() == 'Darwin':
+        import pysvn
+        print('Downloading casacore headers matching casapy svn revision {0}'.format(svnversion))
+        client = pysvn.Client()
+        casacore_svnpath = casa_svnpath_post46(casapath)
+        print(casacore_svnpath)
+        dl_casacore_path = 'casacore-for-casapy-r{0}'.format(svnversion)
+        if not os.access(dl_casacore_path, os.F_OK):
+            os.mkdir(dl_casacore_path)
+        svnrevision=pysvn.Revision(pysvn.opt_revision_kind.number, svnversion)
+        rev = client.checkout(os.path.join(casacore_svnpath, 'casacore'),
+                            os.path.join(dl_casacore_path, 'casacore'),
+                            svnrevision, svnrevision)
+        rev2 = client.checkout(os.path.join(casacore_svnpath, 'code'),
+                            os.path.join(dl_casacore_path, 'casacode'),
+                            svnrevision, svnrevision)
+
+        # Temporary hack to solve issue with casacore version in casapy.
+        shutil.copyfile(os.path.join(dl_casacore_path, 'casacore', 'casa', 'config.h.in'),
+                os.path.join(dl_casacore_path, 'casacore', 'casa', 'config.h'))
+        with open(os.path.join(dl_casacore_path, 'casacore', 'casa', 'config.h')) as tmpfile:
+            lines = list(tmpfile.readlines())
+        with open(os.path.join(dl_casacore_path, 'casacore', 'casa', 'config.h'), 'w') as tmpfile:
+            for line in lines:
+                if line == '#define CASA_DEFAULT_ALIGNMENT (@CASA_DEFAULT_ALIGNMENT@UL)\n':
+                    line = '#define CASA_DEFAULT_ALIGNMENT (32UL)\n'
+                tmpfile.write(line)
+        print('done')
+    elif link_against_casa and int(svnversion) >= 35147:
+        pass
+    elif link_against_casa and int(svnversion) > 33600:
+        import pysvn
+        print('Downloading casacore headers matching casapy svn revision {0}'.format(svnversion))
+        client = pysvn.Client()
+        casacore_svnpath = 'https://svn.cv.nrao.edu/svn/casa/trunk/casacore/'
+        dl_casacore_path = 'casacore-for-casapy-r{0}'.format(svnversion)
+        if not os.access(dl_casacore_path, os.F_OK):
+            os.mkdir(dl_casacore_path)
+        svnrevision=pysvn.Revision(pysvn.opt_revision_kind.number, svnversion)
+        rev = client.checkout(casacore_svnpath,
+                            os.path.join(dl_casacore_path, 'casacore'),
+                            svnrevision, svnrevision)
+        print('done')
+    elif link_against_casa and int(svnversion) > 22889:
+        import pysvn
+        print('Downloading casacore headers matching casapy svn revision {0}'.format(svnversion))
+        client = pysvn.Client()
+        casacore_svnpath = 'https://svn.cv.nrao.edu/svn/casa/trunk/casacore/'
+        dl_casacore_path = 'casacore-for-casapy-r{0}'.format(svnversion)
+        svnrevision=pysvn.Revision(pysvn.opt_revision_kind.number, svnversion)
+        rev = client.checkout(casacore_svnpath, dl_casacore_path, svnrevision, svnrevision)
+        print('done')
+
+    if int(svnversion) <= 32000:
+        casacorelibs = ['casa_scimath', 'casa_casa', 'casa_tables', 'casa_images', 
+                        'casa_ms', 'casa_components', 'casa_coordinates',
+                        'casa_lattices','casa_measures', 'casa_scimath_f',
+                        'casa_fits', 'casa_msfits', 'casa_derivedmscal',
+                        'casa_mirlib']
+
+    # Also add code here.
     if int(svnversion) >= 36590 or platform.system() == 'Darwin':
         env.Append(CPPPATH = [dl_casacore_path,
                               os.path.join(dl_casacore_path, 'casacore'),
@@ -382,8 +385,10 @@ if link_against_casa :
                     if not os.access(newpath, os.F_OK):
                         os.symlink(oldpath,newpath)
                 env.Append(LIBPATH = [casalibpath_local])
-
-
+else:
+    # linking against casacore, not casa. Dunno how to find include intelligently...
+    env.Append(CPPPATH = [ '/usr/include/casacore', '/usr/include/casarest' ])
+    env['CPPDEFINES'] = {'CASACORE_VERSION_2': True, 'casa': 'casacore'}
 
 conf = Configure(env, custom_tests = {'CheckPKGConfig': CheckPKGConfig, 'CheckPKG': CheckPKG})
 
@@ -413,7 +418,9 @@ if platform.system() == 'Linux':
         if os.access(os.path.join(casalibpath, 'libcfitsio.so.0'), os.F_OK):
             env.Append(LIBS=File(os.path.join(casalibpath, 'libcfitsio.so.0')))
     else:
-        env.Append(LIBS=['gfortran', 'lapack', 'blas', 'wcs', 'cfitsio'])
+        ## env.Append(LIBS=['gfortran', 'lapack', 'blas', 'wcs', 'cfitsio'])
+        ## For Ubuntu 18:
+        env.Append(LIBS=['wcs', 'cfitsio'])
 elif platform.system() == 'Darwin':
     if link_against_casa:
         if int(svnversion) >= 33623:

@@ -4,6 +4,8 @@ import stacker.image
 import stacker.uv
 import stacker.modsub
 import numpy as np
+import os, shutil
+from casacore.tables import table
 
 # --- Constants ---
 donoise = False # Do Monte Carlo noise estimate, can be time consuming.
@@ -14,14 +16,13 @@ donoise = False # Do Monte Carlo noise estimate, can be time consuming.
 # Estimate the flux and noise for the source in the phase centre
 # of the measurement vis
 def estimate_flux_and_noise(vis):
-    ms.open(vis)
+    ms = table(vis).query("FIELD_ID==0")
     # This selection is not needed here, but required for mosaiced data sets
     # (and it does no harm here).
-    ms.select({'field_id': 0}) 
-    corrected_data = ms.getdata(['corrected_data'])['corrected_data']
-    weight = ms.getdata(['weight'])['weight']
-    flag = ms.getdata(['flag'])['flag']
-    ms.done()
+    corrected_data = ms.getcol("CORRECTED_DATA")
+    weight = ms.getcol("WEIGHT")
+    flag = ms.getcol("FLAG")
+    ms.close()
 
     # Easier to work with a mask in place of a set of flags.
     mask = np.logical_not(flag)
@@ -55,35 +56,50 @@ def model_fit(vis):
     mask = np.logical_not(flag)
 
 
-if os.access('output', os.F_OK): shutil.rmtree('output')
-os.mkdir('output')
+if not os.access('output', os.F_OK): 
+    os.mkdir('output')
 
 # --- Image the data set to locate bright sources. ---
-clean('testdata.ms', 'output/full', 
-      imagermode='csclean',
-      phasecenter = 'J2000 3h49m10.987 -30d00m00.00',
-      cell = '.25arcsec', imsize=1600,
-      pbcor = True, niter=1000, minpb=0.05,
-      threshold = '0.1mJy', #Only clean bright sources, not target sources.
-      psfmode='hogbom')
+    os.system("wsclean -name output/full -scale .25asec -size 3200 3200 -niter 10000 -padding 1.5 -threshold 1e-4 testdata.ms")
+    os.system("cp -a testdata.ms output/residual.ms")
 
-# --- Create a residual data set where bright sources are removed. ---
+    tab = table("testdata.ms")
+    datacol = tab.getcol("DATA")
+    modelcol = tab.getcol("MODEL_DATA")
+    table("output/residual.ms", readonly=False).putcol("DATA", datacol-modelcol)
+    del datacol, modelcol
 
-# First produce component list of model
-stacker.modsub.cl_from_im('output/full.model', 'output/full.cl',
-                  threshold = 1e-6)
-# and subtract the component list from the data.
-# Note the use of primarybeam='constant', as the model is NOT primary-beam
-# corrected this will result in the correct subtraction
-stacker.modsub.modsub('output/full.cl', 
-        'testdata.ms', 'output/residual.ms',
-        primarybeam='constant') # No pb since .model is not pbcorrected.
-# Finally image the residual for image stacking and local noise estimation.
-clean('output/residual.ms', 'output/residual',
-      imagermode='csclean',
-      phasecenter = 'J2000 3h49m10.987 -30d00m00.00',
-      cell = '.25arcsec', imsize=1600,
-      pbcor = True, niter=0, minpb=0.05)
+# clean('testdata.ms', 'output/full', 
+#       imagermode='csclean',
+#       phasecenter = 'J2000 3h49m10.987 -30d00m00.00',
+#       cell = '.25arcsec', imsize=1600,
+#       pbcor = True, niter=1000, minpb=0.05,
+#       threshold = '0.1mJy', #Only clean bright sources, not target sources.
+#       psfmode='hogbom')
+
+
+## OMS: I don't think this is needed, as WSCLEAN produces a residual image anyway
+
+# # --- Create a residual data set where bright sources are removed. ---
+
+# # First produce component list of model
+# stacker.modsub.cl_from_im('output/full.model', 'output/full.cl',
+#                   threshold = 1e-6)
+# # and subtract the component list from the data.
+# # Note the use of primarybeam='constant', as the model is NOT primary-beam
+# # corrected this will result in the correct subtraction
+# stacker.modsub.modsub('output/full.cl', 
+#         'testdata.ms', 'output/residual.ms',
+#         primarybeam='constant') # No pb since .model is not pbcorrected.
+# # Finally image the residual for image stacking and local noise estimation.
+# clean('output/residual.ms', 'output/residual',
+#       imagermode='csclean',
+#       phasecenter = 'J2000 3h49m10.987 -30d00m00.00',
+#       cell = '.25arcsec', imsize=1600,
+#       pbcor = True, niter=0, minpb=0.05)
+
+## subtract model data from data to get residual column
+
 
 # --- Do the stacking ---
 
@@ -95,15 +111,15 @@ coords = stacker.readCoords('coordinates.list')
 print("Starting to stack.")
 # Calculate position specific weigths from noise in residual image
 coords = stacker.image.calculate_sigma2_weights(coords,
-        imagenames = ['output/residual.image'],
+        imagenames = ['output/full-residual.fits'],
         stampsize = stampsize,
         maskradius = 5) # Excludes pixels closer to centre than 5 pixels.
 
 # Actual stack, in both image and uv domain.
 flux = {}
 
-flux['image'] = stacker.image.stack(coords, 'output/imstacked.image', 
-                    imagenames=['output/residual.image'], 
+flux['image'] = stacker.image.stack(coords, 'output/imstacked.fits', 
+                    imagenames=['output/full-residual.fits'], 
                     stampsize=stampsize, 
                     method='mean',  # As opposed to median.
                     weighting=None) # This ensures that the weights set 
@@ -156,8 +172,9 @@ print('uv-stacking flux: {0:.1f}+-{1:.1f} uJy'.format(np.real(flux['uv'])*1e6,
 #     np.real(flux['uv_model'])*1e6, size))
 
 # Image the uv-stacked data to produce an image.
-clean('output/uvstacked.ms', 'output/uvstacked',
-      cell = '.25arcsec', imsize=stampsize,
-      mask = [int(stampsize/2)-2, int(stampsize/2)-2,
-              int(stampsize/2)+2, int(stampsize/2)+2])
+os.system("wsclean -name output/uvstacked -data-column CORRECTED_DATA -scale .25asec -size {} {} -niter 1000 output/uvstacked.ms".format(stampsize, stampsize))
+# clean('output/uvstacked.ms', 'output/uvstacked',
+#       cell = '.25arcsec', imsize=stampsize,
+#       mask = [int(stampsize/2)-2, int(stampsize/2)-2,
+#               int(stampsize/2)+2, int(stampsize/2)+2])
 
